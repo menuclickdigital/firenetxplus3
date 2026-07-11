@@ -967,7 +967,7 @@
             <div class="help-tip" style="margin-top: 15px; max-width: fit-content;">
                 <i class="fas fa-gamepad"></i> Selecciona los estrenos de la fila inferior o presiona OK/Toca para ver detalles.
             </div>
-            </div>
+        </div>
 
         <div class="home-carousel-container">
             <div id="home-carousel" class="home-carousel"></div>
@@ -1250,7 +1250,6 @@
                 return;
             }
 
-            // --- LÓGICA AGREGADA PARA ASEGURAR QUE LAS URLS DE DROPBOX FUNCIONEN (Descarga Directa) ---
             if (url.includes("dropbox.com") || url.includes("dropboxusercontent.com")) {
                 url = url.replace("?dl=0", "?dl=1");
                 if (!url.includes("?dl=1") && !url.includes("&dl=1")) {
@@ -1309,22 +1308,17 @@
             }
         }
 
-        // GUARDA Y SUBE A LA NUBE (NPOINT) - PUBLICAR EN VIVO
         async function saveAndReloadAdmin() {
             const btn = document.getElementById('admin-btn-save');
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
             
             try {
-                // Subir a Npoint (POST request actualiza la estructura base del token)
                 await fetch(NPOINT_URL, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ dnsList: dnsList, playlistsList: playlistsList })
                 });
 
-                // Respaldo Local en caso de intermitencia
                 localStorage.setItem('firenetx_dns_list', JSON.stringify(dnsList));
                 localStorage.setItem('firenetx_playlists_list', JSON.stringify(playlistsList));
                 
@@ -1433,7 +1427,7 @@
 
         function logout() { localStorage.clear(); location.reload(); }
 
-        // --- SISTEMA DE ACCESO GRATIS (M3U PARSER DINÁMICO DESDE PANEL) --- //
+        // --- SISTEMA DE ACCESO GRATIS --- //
         async function fetchAndParseM3U(url, type) {
             try {
                 const response = await fetch(url);
@@ -1487,7 +1481,6 @@
         }
 
         async function authFreeAccess() {
-            // Filtramos únicamente las listas que NO estén ocultas
             const activePlaylists = playlistsList.filter(pl => !pl.hidden);
 
             if(activePlaylists.length === 0) {
@@ -1544,7 +1537,6 @@
                 toggleLoader(false);
             }
         }
-        // --- FIN SISTEMA M3U --- //
 
         async function auth() {
             u = document.getElementById('user').value.trim();
@@ -1667,189 +1659,204 @@
                 card.onclick = () => { lastFocus = card; openDetails(item, 'movie'); };
                 carousel.appendChild(card);
             });
-            
-            if(homeBgInterval) clearInterval(homeBgInterval);
-            homeBgInterval = setInterval(() => {
-                if (currentMode !== 'home' || 
-                    document.getElementById('modal-info').style.display === 'flex' || 
-                    document.getElementById('modal-search').style.display === 'flex' ||
-                    document.getElementById('modal-manual').style.display === 'flex' ||
-                    document.getElementById('modal-seasons').style.display === 'flex') return;
-
-                if (estrenos.length > 0) {
-                    currentHomeIndex = (currentHomeIndex + 1) % estrenos.length;
-                    homeActiveItem = estrenos[currentHomeIndex];
-                    updateHomeBackground(homeActiveItem);
-                    
-                    const cards = carousel.querySelectorAll('.carousel-item');
-                    if(cards[currentHomeIndex]) {
-                        cards[currentHomeIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
-                    }
-                }
-            }, 4000);
-
-            setTimeout(() => {
-                const firstCarouselItem = document.querySelector('.carousel-item');
-                if(firstCarouselItem) firstCarouselItem.focus();
-            }, 100);
         }
 
-        async function updateHomeBackground(item) {
-            const bg = document.getElementById('home-bg');
-            const title = document.getElementById('home-title');
-            const plot = document.getElementById('home-plot');
-            
-            bg.style.backgroundImage = `url(${item.cover || item.stream_icon})`;
-            title.innerText = item.name || "Estreno";
-            plot.innerText = "Cargando sinopsis...";
-
-            if(isFreeAccess) {
-                plot.innerText = item.category_name || "Contenido de acceso gratuito. Selecciona para ver detalles.";
-                return;
-            }
-
-            clearTimeout(homeBgTimeout);
-            homeBgTimeout = setTimeout(async () => {
-                const id = item.stream_id || item.id;
-                const details = await fetchRetry(`${host}/player_api.php?username=${u}&password=${p}&action=get_vod_info&vod_id=${id}`);
-                
-                if (details && details.info && details.info.plot) {
-                    plot.innerText = details.info.plot;
-                } else {
-                    const tmdbData = await getTMDBFallback(item.name || item.title);
-                    if (tmdbData) {
-                        if (tmdbData.plot) plot.innerText = tmdbData.plot;
-                        if (tmdbData.cover && (!item.cover && !item.stream_icon)) bg.style.backgroundImage = `url(${tmdbData.cover})`;
-                    } else {
-                        plot.innerText = "Explora más de 52,000 películas, 5,500 series y 4,100 canales al instante en FIRENETX.";
-                    }
-                }
-            }, 300);
+        function updateHomeBackground(item) {
+            if(!item) return;
+            const bgImg = item.stream_icon || item.cover || '';
+            const bgDiv = document.getElementById('home-bg');
+            bgDiv.style.backgroundImage = `url('${bgImg}')`;
+            document.getElementById('home-title').innerText = item.name || item.title || 'Desconocido';
+            document.getElementById('home-plot').innerText = 'Contenido Destacado disponible en FIRENETX. Presiona OK para ver detalles y reproducir usando tu reproductor favorito.';
         }
 
         function renderSidebarAndContent() {
             const sidebar = document.getElementById('left-category-sidebar');
-            sidebar.innerHTML = ""; 
-
-            const catKey = `${currentMode}Cats`;
-            const categories = globalDatabase[catKey] || [];
-            const dataItems = globalDatabase[currentMode] || [];
-
-            if (currentMode === 'movie' || currentMode === 'series') {
-                const historyBtn = document.createElement('button');
-                historyBtn.className = 'smarters-cat-btn nav-item';
-                let h = getFirenetxHistory();
-                let hCount = Object.keys(h[currentMode] || {}).length;
-                historyBtn.innerHTML = `<div class="cat-info"><i class="fas fa-history" style="color: var(--watched-green);"></i> <span>Historial (Visto)</span></div><span class="cat-count">${hCount}</span>`;
-                historyBtn.onclick = () => {
-                    sidebar.querySelectorAll('.smarters-cat-btn').forEach(b => b.classList.remove('active'));
-                    historyBtn.classList.add('active');
-                    let items = Object.values(getFirenetxHistory()[currentMode] || {}).sort((a,b) => b._timestamp - a._timestamp);
-                    renderGridElements(items);
-                };
-                sidebar.appendChild(historyBtn);
+            sidebar.innerHTML = "";
+            let catsKey = currentMode + 'Cats';
+            let categories = globalDatabase[catsKey] || [];
+            
+            if(categories.length > 0) {
+                categories.forEach((cat, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'smarters-cat-btn nav-item';
+                    
+                    let itemCount = globalDatabase[currentMode].filter(i => i.category_id == cat.category_id).length;
+                    
+                    btn.innerHTML = `
+                        <div class="cat-info">
+                            <i class="fas ${currentMode === 'movie' ? 'fa-film' : currentMode === 'series' ? 'fa-tv' : 'fa-broadcast-tower'}"></i>
+                            <span>${cat.category_name}</span>
+                        </div>
+                        <span class="cat-count">${itemCount}</span>
+                    `;
+                    
+                    btn.onclick = () => {
+                        document.querySelectorAll('.smarters-cat-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        loadCategory(cat.category_id, currentMode);
+                    };
+                    sidebar.appendChild(btn);
+                    if(index === 0) btn.click();
+                });
             }
-
-            const allBtn = document.createElement('button');
-            allBtn.className = 'smarters-cat-btn nav-item active';
-            allBtn.innerHTML = `<div class="cat-info"><i class="fas fa-folder-open"></i> <span>Todo el Contenido</span></div><span class="cat-count">${dataItems.length}</span>`;
-            allBtn.onclick = () => {
-                sidebar.querySelectorAll('.smarters-cat-btn').forEach(b => b.classList.remove('active'));
-                allBtn.classList.add('active'); renderGridElements(dataItems);
-            };
-            sidebar.appendChild(allBtn);
-
-            categories.forEach(cat => {
-                const filteredItems = dataItems.filter(item => item.category_id === cat.category_id);
-                if (filteredItems.length === 0) return; 
-
-                const catBtn = document.createElement('button');
-                catBtn.className = 'smarters-cat-btn nav-item';
-                catBtn.innerHTML = `<div class="cat-info"><i class="fas fa-folder"></i> <span>${cat.category_name}</span></div><span class="cat-count">${filteredItems.length}</span>`;
-                catBtn.onclick = () => {
-                    sidebar.querySelectorAll('.smarters-cat-btn').forEach(b => b.classList.remove('active'));
-                    catBtn.classList.add('active'); renderGridElements(filteredItems);
-                };
-                sidebar.appendChild(catBtn);
-            });
-
-            renderGridElements(dataItems);
-            setTimeout(() => { allBtn.focus(); }, 50);
         }
 
-        function renderGridElements(items) {
-            currentGridItems = items || [];
+        function loadCategory(catId, type) {
+            currentGridItems = globalDatabase[type].filter(item => item.category_id == catId);
             itemsLoadedCount = 0;
-            const grid = document.getElementById('main-content-grid');
-            if (grid) grid.innerHTML = ""; 
+            document.getElementById('main-content-grid').innerHTML = "";
             appendNextGridChunk();
         }
 
         function appendNextGridChunk() {
             const grid = document.getElementById('main-content-grid');
-            if (!grid || !currentGridItems || itemsLoadedCount >= currentGridItems.length) return;
-
-            const idsRenderizados = new Set();
-            grid.querySelectorAll('.movie-card').forEach(card => {
-                idsRenderizados.add(card.getAttribute('data-id'));
-            });
-
-            let addedInThisChunk = 0;
             const fragment = document.createDocumentFragment();
-
-            while (itemsLoadedCount < currentGridItems.length && addedInThisChunk < CHUNK_SIZE) {
-                const item = currentGridItems[itemsLoadedCount];
-                itemsLoadedCount++;
-
-                const idUnico = item.stream_id || item.series_id || item.id;
-                if (idsRenderizados.has(String(idUnico))) continue;
-                idsRenderizados.add(String(idUnico));
-
+            const end = Math.min(itemsLoadedCount + CHUNK_SIZE, currentGridItems.length);
+            
+            for(let i = itemsLoadedCount; i < end; i++) {
+                const item = currentGridItems[i];
                 const card = document.createElement('div');
-                card.className = (currentMode === 'live') ? "movie-card live-card nav-item" : "movie-card nav-item"; 
+                card.className = `movie-card nav-item ${currentMode === 'live' ? 'live-card' : ''}`;
                 card.tabIndex = 0;
-                card.setAttribute('data-id', idUnico);
-
-                const imgSrc = item.stream_icon || item.cover || '';
-                card.innerHTML = `<img src="${imgSrc}" data-title="${(item.name || item.title || '').replace(/"/g, '"')}" onerror="handleImgError(this)" loading="lazy"><div class="card-title-container"><span class="card-title-text">${item.name}</span></div>`;
-                card.onclick = () => { lastFocus = card; openDetails(item, currentMode); };
                 
-                card.onfocus = () => {
-                    const allCards = grid.querySelectorAll('.movie-card');
-                    const myIndex = Array.from(allCards).indexOf(card);
-                    if (myIndex >= allCards.length - 20) {
-                        appendNextGridChunk();
-                    }
-                };
-
+                const imgSrc = item.stream_icon || item.cover || '';
+                const title = item.name || item.title || 'Sin Título';
+                
+                card.innerHTML = `
+                    <img src="${imgSrc}" data-title="${title.replace(/"/g, '"')}" onerror="handleImgError(this)" loading="lazy">
+                    <div class="card-title-container">
+                        <span class="card-title-text">${title}</span>
+                    </div>
+                `;
+                
+                card.onclick = () => { lastFocus = card; openDetails(item, currentMode); };
                 fragment.appendChild(card);
-                addedInThisChunk++;
             }
             grid.appendChild(fragment);
-        }
-        
-        function openDetails(item, mode) {
-            // Lógica original de apertura de detalles...
-            console.log("Apertura de detalles activada: " + (item.name || item.title));
+            itemsLoadedCount = end;
         }
 
-        function handleBackNavigation() {
-            document.getElementById('modal-info').style.display = 'none';
-            document.getElementById('modal-search').style.display = 'none';
-            document.getElementById('modal-manual').style.display = 'none';
-            document.getElementById('modal-seasons').style.display = 'none';
-        }
+        function openDetails(item, type) {
+            const modal = document.getElementById('modal-info');
+            modal.style.display = 'flex';
+            
+            document.getElementById('m-title').innerText = item.name || item.title || 'Sin Título';
+            
+            const poster = document.getElementById('m-poster');
+            poster.dataset.fallbackAttempted = 'false';
+            poster.setAttribute('data-title', item.name || item.title || '');
+            poster.style.display = 'block';
+            const oldFallback = poster.parentElement.querySelector('.fallback-card');
+            if (oldFallback) oldFallback.remove();
+            poster.src = item.stream_icon || item.cover || '';
 
-        function togglePlotDimensions() {
-            const plotBox = document.getElementById('m-plot');
-            const btn = document.getElementById('btn-toggle-plot');
-            if(plotBox.classList.contains('expanded')) {
-                plotBox.classList.remove('expanded');
-                btn.innerText = 'Ver más';
+            const playBtn = document.getElementById('m-play-btn');
+            const seriesSec = document.getElementById('series-section');
+            const plotEl = document.getElementById('m-plot');
+
+            plotEl.innerText = item.plot || "Sin descripción disponible.";
+            plotEl.classList.remove('expanded');
+            document.getElementById('btn-toggle-plot').innerText = 'Ver más';
+
+            // -----------------------------------------------------------
+            // CÓDIGO ACTUALIZADO: GENERAR INTENT DE REPRODUCTOR EXTERNO
+            // -----------------------------------------------------------
+            playBtn.onclick = () => {
+                let streamUrl = "";
+                
+                if (isFreeAccess && item.url) {
+                    streamUrl = item.url;
+                } else {
+                    let extension = item.container_extension || (type === 'live' ? 'm3u8' : 'mp4');
+                    let id = item.stream_id || item.id;
+                    let typePath = type === 'live' ? 'live' : (type === 'movie' ? 'movie' : 'series');
+                    streamUrl = `${host}/${typePath}/${u}/${p}/${id}.${extension}`;
+                }
+                
+                addToHistory(item, type);
+
+                // --- Lógica del Intent de Android ---
+                let urlWithoutScheme = streamUrl.replace(/(^\w+:|^)\/\//, '');
+                let scheme = streamUrl.startsWith('https') ? 'https' : 'http';
+                // El Intent invoca al selector de reproductores de vídeo de Android
+                let intentUrl = `intent://${urlWithoutScheme}#Intent;action=android.intent.action.VIEW;scheme=${scheme};type=video/*;end;`;
+                
+                window.location.href = intentUrl;
+            };
+
+            if(type === 'series') {
+                playBtn.style.display = 'none';
+                seriesSec.style.display = 'block';
+                loadSeriesSeasons(item);
             } else {
-                plotBox.classList.add('expanded');
-                btn.innerText = 'Ver menos';
+                playBtn.style.display = 'flex';
+                seriesSec.style.display = 'none';
             }
+        }
+
+        async function loadSeriesSeasons(item) {
+            if(isFreeAccess) return; // Las series M3U suelen ser planas
+            document.getElementById('episodes-list').innerHTML = '<span style="color:#aaa;">Cargando temporadas...</span>';
+            const data = await fetchRetry(`${host}/player_api.php?username=${u}&password=${p}&action=get_series_info&series_id=${item.series_id || item.id}`);
+            if(data && data.episodes) {
+                currentSeriesData = data;
+                let firstSeason = Object.keys(data.episodes)[0];
+                document.getElementById('current-season-label').innerText = `Temporada ${firstSeason}`;
+                renderEpisodes(data.episodes[firstSeason]);
+            }
+        }
+
+        function renderEpisodes(episodesArray) {
+            const list = document.getElementById('episodes-list');
+            list.innerHTML = "";
+            episodesArray.forEach(ep => {
+                const epCard = document.createElement('div');
+                epCard.className = 'episode-card nav-item';
+                epCard.innerHTML = `
+                    <div class="ep-img-box"><img src="${ep.info?.movie_image || ''}" onerror="this.src='https://novaplayer.simdif.com/images/public/sd_6a1b20667a85b.png?no_cache=1780169872'"></div>
+                    <div class="ep-info">
+                        <div>
+                            <div class="ep-title">E${ep.episode_num}: ${ep.title}</div>
+                            <div class="ep-meta">${ep.info?.duration || '--:--'}</div>
+                        </div>
+                        <i class="fas fa-play-circle" style="font-size:24px; color:var(--netflix-red);"></i>
+                    </div>
+                `;
+                epCard.onclick = () => {
+                    let streamUrl = `${host}/series/${u}/${p}/${ep.id}.${ep.container_extension || 'mp4'}`;
+                    
+                    let urlWithoutScheme = streamUrl.replace(/(^\w+:|^)\/\//, '');
+                    let scheme = streamUrl.startsWith('https') ? 'https' : 'http';
+                    let intentUrl = `intent://${urlWithoutScheme}#Intent;action=android.intent.action.VIEW;scheme=${scheme};type=video/*;end;`;
+                    
+                    window.location.href = intentUrl;
+                };
+                list.appendChild(epCard);
+            });
+        }
+
+        function openSeasonsModal() {
+            if(!currentSeriesData) return;
+            const modal = document.getElementById('modal-seasons');
+            const list = document.getElementById('season-selector-list');
+            list.innerHTML = "";
+            Object.keys(currentSeriesData.episodes).forEach(seasonKey => {
+                const btn = document.createElement('div');
+                btn.className = "season-item nav-item";
+                btn.innerText = `Temporada ${seasonKey}`;
+                btn.onclick = () => {
+                    document.getElementById('current-season-label').innerText = `Temporada ${seasonKey}`;
+                    renderEpisodes(currentSeriesData.episodes[seasonKey]);
+                    modal.style.display = 'none';
+                };
+                list.appendChild(btn);
+            });
+            modal.style.display = 'flex';
+        }
+
+        function openManualModal() {
+            document.getElementById('modal-manual').style.display = 'flex';
         }
 
         function openSearch() {
@@ -1857,18 +1864,80 @@
             document.getElementById('global-search-input').focus();
         }
 
-        function performGlobalSearch(val) {
-            // Lógica de búsqueda original
-        }
-
         function clearSearchInput() {
-            document.getElementById('global-search-input').value = '';
-            document.getElementById('search-results-grid').innerHTML = '';
+            document.getElementById('global-search-input').value = "";
+            document.getElementById('search-results-grid').innerHTML = "";
+            document.getElementById('clear-search-btn').style.display = 'none';
+            document.getElementById('global-search-input').focus();
         }
 
-        function openManualModal() {
-            document.getElementById('modal-manual').style.display = 'flex';
+        function performGlobalSearch(query) {
+            query = query.toLowerCase().trim();
+            const grid = document.getElementById('search-results-grid');
+            const clearBtn = document.getElementById('clear-search-btn');
+            grid.innerHTML = "";
+            
+            if(query.length > 0) {
+                clearBtn.style.display = 'block';
+            } else {
+                clearBtn.style.display = 'none';
+                return;
+            }
+            if(query.length < 3) return;
+
+            const results = [];
+            ['movie', 'series', 'live'].forEach(type => {
+                const matches = globalDatabase[type].filter(item => {
+                    const title = (item.name || item.title || "").toLowerCase();
+                    return title.includes(query);
+                }).slice(0, 30);
+                
+                matches.forEach(m => {
+                    const card = document.createElement('div');
+                    card.className = `movie-card nav-item ${type === 'live' ? 'live-card' : ''}`;
+                    const imgSrc = m.stream_icon || m.cover || '';
+                    const titleText = m.name || m.title || 'Sin Título';
+                    
+                    card.innerHTML = `
+                        <img src="${imgSrc}" onerror="handleImgError(this)">
+                        <div class="card-title-container">
+                            <span class="card-title-text">[${type.toUpperCase()}] ${titleText}</span>
+                        </div>
+                    `;
+                    card.onclick = () => {
+                        document.getElementById('modal-search').style.display = 'none';
+                        openDetails(m, type);
+                    };
+                    results.push(card);
+                });
+            });
+
+            results.forEach(c => grid.appendChild(c));
         }
+
+        function togglePlotDimensions() {
+            const plotEl = document.getElementById('m-plot');
+            const btn = document.getElementById('btn-toggle-plot');
+            if (plotEl.classList.contains('expanded')) {
+                plotEl.classList.remove('expanded');
+                btn.innerText = 'Ver más';
+            } else {
+                plotEl.classList.add('expanded');
+                btn.innerText = 'Ver menos';
+            }
+        }
+
+        function handleBackNavigation() {
+            document.getElementById('modal-info').style.display = 'none';
+            document.getElementById('modal-seasons').style.display = 'none';
+            document.getElementById('modal-manual').style.display = 'none';
+            document.getElementById('modal-search').style.display = 'none';
+            if (lastFocus) {
+                lastFocus.focus();
+                lastFocus = null;
+            }
+        }
+
     </script>
 </body>
 </html>
